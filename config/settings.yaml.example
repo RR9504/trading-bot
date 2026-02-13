@@ -1,0 +1,47 @@
+mode: paper  # paper | live
+
+paper_trading:
+  initial_balance: 100000
+  currency: SEK
+
+risk:
+  max_position_pct: 0.10      # Max 10% av portföljen per position
+  stop_loss_pct: 0.05          # 5% stop-loss
+  daily_loss_limit_pct: 0.03   # Max 3% förlust per dag
+  max_open_positions: 10
+
+strategy: rsi  # rsi | macd | bollinger | momentum
+
+symbols:
+  us:
+    - AAPL
+    - TSLA
+    - MSFT
+    - GOOGL
+  crypto:
+    - BTC-USD
+    - ETH-USD
+  swedish:
+    - VOLV-B.ST
+    - ERIC-B.ST
+    - HM-B.ST
+
+alpaca:
+  api_key: YOUR_ALPACA_API_KEY
+  api_secret: YOUR_ALPACA_SECRET
+  base_url: https://paper-api.alpaca.markets
+
+binance:
+  api_key: YOUR_BINANCE_API_KEY
+  api_secret: YOUR_BINANCE_SECRET
+  testnet: true
+
+avanza:
+  username: YOUR_USERNAME
+  password: YOUR_PASSWORD
+  totp_secret: YOUR_TOTP_SECRET
+
+logging:
+  level: INFO
+  trade_log: logs/trades.log
+  signal_log: logs/signals.log
