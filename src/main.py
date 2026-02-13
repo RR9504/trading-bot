@@ -5,6 +5,9 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.brokers.paper_broker import PaperBroker
+from src.brokers.alpaca_broker import AlpacaBroker
+from src.brokers.binance_broker import BinanceBroker
+from src.brokers.avanza_broker import AvanzaBroker
 from src.core.engine import TradingEngine
 from src.core.risk import RiskManager
 from src.data.fetcher import DataFetcher
@@ -44,12 +47,34 @@ def main():
     logger.info(f"Laddar konfiguration: mode={config['mode']}, strategi={config['strategy']}")
 
     # Broker
-    if config["mode"] == "paper":
+    mode = config["mode"]
+    if mode == "paper":
         paper_config = config.get("paper_trading", {})
         broker = PaperBroker(initial_balance=paper_config.get("initial_balance", 100000))
         logger.info(f"Paper trading aktiverat med {broker.cash:.0f} {paper_config.get('currency', 'SEK')}")
+    elif mode == "alpaca":
+        ac = config.get("alpaca", {})
+        broker = AlpacaBroker(api_key=ac["api_key"], api_secret=ac["api_secret"], base_url=ac.get("base_url", "https://paper-api.alpaca.markets"))
+        if not broker.connect():
+            sys.exit(1)
+        symbols = config.get("symbols", {}).get("us", [])
+        logger.info("Alpaca live-trading aktiverat (US-aktier)")
+    elif mode == "binance":
+        bc = config.get("binance", {})
+        broker = BinanceBroker(api_key=bc["api_key"], api_secret=bc["api_secret"], testnet=bc.get("testnet", True))
+        if not broker.connect():
+            sys.exit(1)
+        symbols = config.get("symbols", {}).get("crypto", [])
+        logger.info(f"Binance trading aktiverat (testnet={bc.get('testnet', True)})")
+    elif mode == "avanza":
+        av = config.get("avanza", {})
+        broker = AvanzaBroker(username=av["username"], password=av["password"], totp_secret=av["totp_secret"])
+        if not broker.connect():
+            sys.exit(1)
+        symbols = config.get("symbols", {}).get("swedish", [])
+        logger.info("Avanza live-trading aktiverat (svenska aktier)")
     else:
-        logger.error("Live-trading inte implementerat ännu. Använd mode: paper")
+        logger.error(f"Okänt mode: {mode}. Välj: paper, alpaca, binance, avanza")
         sys.exit(1)
 
     # Strategi
