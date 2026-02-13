@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f1117;
+            color: #e1e4e8;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        .header .status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #f85149;
+        }
+        .status-dot.running { background: #3fb950; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-start { background: #238636; color: #fff; }
+        .btn-start:hover { background: #2ea043; }
+        .btn-stop { background: #da3633; color: #fff; }
+        .btn-stop:hover { background: #f85149; }
+
+        /* Main layout */
+        .container { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .kpi-card .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #8b949e;
+            margin-bottom: 8px;
+        }
+        .kpi-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f0f6fc;
+        }
+        .kpi-card .sub {
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .positive { color: #3fb950; }
+        .negative { color: #f85149; }
+
+        /* Chart section */
+        .chart-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .chart-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #f0f6fc;
+        }
+        .chart-container { position: relative; height: 300px; }
+
+        /* Tables */
+        .tables-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        @media (max-width: 900px) { .tables-grid { grid-template-columns: 1fr; } }
+
+        .table-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .table-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #f0f6fc;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #8b949e;
+            padding: 8px 12px;
+            border-bottom: 1px solid #30363d;
+        }
+        td {
+            padding: 10px 12px;
+            font-size: 14px;
+            border-bottom: 1px solid #21262d;
+        }
+        tr:hover { background: #1c2128; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .badge-buy { background: #0d4429; color: #3fb950; }
+        .badge-sell { background: #490202; color: #f85149; }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #8b949e;
+        }
+
+        /* Strategy badge */
+        .strategy-badge {
+            background: #1f2937;
+            border: 1px solid #374151;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+            color: #60a5fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Trading Bot</h1>
+        <div class="status">
+            <span class="strategy-badge" id="strategy-name">-</span>
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">Stoppad</span>
+            <button class="btn btn-start" id="btn-start" onclick="startBot()">Starta</button>
+            <button class="btn btn-stop" id="btn-stop" onclick="stopBot()" style="display:none;">Stoppa</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="label">Totalt v&auml;rde</div>
+                <div class="value" id="total-value">0 kr</div>
+                <div class="sub" id="total-pnl">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Kapital</div>
+                <div class="value" id="cash">0 kr</div>
+                <div class="sub">Tillg&auml;ngligt</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Positioner</div>
+                <div class="value" id="positions-value">0 kr</div>
+                <div class="sub" id="num-positions">0 &ouml;ppna</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Trades</div>
+                <div class="value" id="total-trades">0</div>
+                <div class="sub" id="win-rate">Win rate: -</div>
+            </div>
+        </div>
+
+        <!-- Equity Chart -->
+        <div class="chart-section">
+            <h2>Equity-kurva</h2>
+            <div class="chart-container">
+                <canvas id="equity-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tables -->
+        <div class="tables-grid">
+            <div class="table-section">
+                <h2>&Ouml;ppna positioner</h2>
+                <table id="positions-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Antal</th>
+                            <th>Snitt</th>
+                            <th>Nuv.</th>
+                            <th>P&amp;L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positions-body">
+                        <tr><td colspan="5" class="empty-state">Inga positioner</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-section">
+                <h2>Senaste trades</h2>
+                <table id="trades-table">
+                    <thead>
+                        <tr>
+                            <th>Tid</th>
+                            <th>Symbol</th>
+                            <th>Typ</th>
+                            <th>Antal</th>
+                            <th>Pris</th>
+                            <th>P&amp;L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-body">
+                        <tr><td colspan="6" class="empty-state">Inga trades &auml;nnu</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let equityChart = null;
+
+        function initChart() {
+            const ctx = document.getElementById('equity-chart').getContext('2d');
+            equityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Equity',
+                        data: [],
+                        borderColor: '#3fb950',
+                        backgroundColor: 'rgba(63, 185, 80, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        borderWidth: 2,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.parsed.y.toLocaleString('sv-SE')} kr`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#8b949e', maxTicksLimit: 10 },
+                            grid: { color: '#21262d' },
+                        },
+                        y: {
+                            ticks: {
+                                color: '#8b949e',
+                                callback: (v) => v.toLocaleString('sv-SE') + ' kr'
+                            },
+                            grid: { color: '#21262d' },
+                        }
+                    }
+                }
+            });
+        }
+
+        function formatKr(value) {
+            return Number(value).toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kr';
+        }
+
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                const dot = document.getElementById('status-dot');
+                const text = document.getElementById('status-text');
+                const btnStart = document.getElementById('btn-start');
+                const btnStop = document.getElementById('btn-stop');
+
+                if (data.bot_running) {
+                    dot.classList.add('running');
+                    text.textContent = 'Kör';
+                    btnStart.style.display = 'none';
+                    btnStop.style.display = 'inline-block';
+                } else {
+                    dot.classList.remove('running');
+                    text.textContent = 'Stoppad';
+                    btnStart.style.display = 'inline-block';
+                    btnStop.style.display = 'none';
+                }
+
+                document.getElementById('strategy-name').textContent = data.strategy || '-';
+                document.getElementById('total-value').textContent = formatKr(data.total_value || 0);
+                document.getElementById('cash').textContent = formatKr(data.cash || 0);
+                document.getElementById('positions-value').textContent = formatKr(data.positions_value || 0);
+                document.getElementById('num-positions').textContent = `${data.num_positions || 0} öppna`;
+                document.getElementById('total-trades').textContent = data.total_trades || 0;
+                document.getElementById('win-rate').textContent = `Win rate: ${data.win_rate || 0}%`;
+
+                const pnl = data.pnl || 0;
+                const pnlPct = data.pnl_pct || 0;
+                const pnlEl = document.getElementById('total-pnl');
+                pnlEl.textContent = `${pnl >= 0 ? '+' : ''}${formatKr(pnl)} (${pnlPct >= 0 ? '+' : ''}${pnlPct}%)`;
+                pnlEl.className = `sub ${pnl >= 0 ? 'positive' : 'negative'}`;
+            } catch (e) {}
+        }
+
+        async function updatePositions() {
+            try {
+                const res = await fetch('/api/positions');
+                const data = await res.json();
+                const body = document.getElementById('positions-body');
+
+                if (data.length === 0) {
+                    body.innerHTML = '<tr><td colspan="5" class="empty-state">Inga positioner</td></tr>';
+                    return;
+                }
+
+                body.innerHTML = data.map(p => `
+                    <tr>
+                        <td><strong>${p.symbol}</strong></td>
+                        <td>${p.quantity}</td>
+                        <td>${p.avg_price.toFixed(2)}</td>
+                        <td>${p.current_price.toFixed(2)}</td>
+                        <td class="${p.pnl >= 0 ? 'positive' : 'negative'}">
+                            ${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(0)} kr (${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(1)}%)
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function updateTrades() {
+            try {
+                const res = await fetch('/api/trades');
+                const data = await res.json();
+                const body = document.getElementById('trades-body');
+
+                if (data.length === 0) {
+                    body.innerHTML = '<tr><td colspan="6" class="empty-state">Inga trades ännu</td></tr>';
+                    return;
+                }
+
+                body.innerHTML = data.map(t => `
+                    <tr>
+                        <td>${t.timestamp.split(' ')[1]}</td>
+                        <td><strong>${t.symbol}</strong></td>
+                        <td><span class="badge badge-${t.side}">${t.side === 'buy' ? 'KÖP' : 'SÄLJ'}</span></td>
+                        <td>${t.quantity}</td>
+                        <td>${t.price.toFixed(2)}</td>
+                        <td class="${t.pnl >= 0 ? 'positive' : 'negative'}">
+                            ${t.pnl !== 0 ? (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(0) + ' kr' : '-'}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function updateEquity() {
+            try {
+                const res = await fetch('/api/equity');
+                const data = await res.json();
+
+                if (equityChart && data.length > 0) {
+                    equityChart.data.labels = data.map(d => d.time);
+                    equityChart.data.datasets[0].data = data.map(d => d.value);
+
+                    const lastVal = data[data.length - 1].value;
+                    const firstVal = data[0].value;
+                    const color = lastVal >= firstVal ? '#3fb950' : '#f85149';
+                    equityChart.data.datasets[0].borderColor = color;
+                    equityChart.data.datasets[0].backgroundColor = color.replace(')', ', 0.1)').replace('rgb', 'rgba');
+                    equityChart.update('none');
+                }
+            } catch (e) {}
+        }
+
+        async function startBot() {
+            await fetch('/api/start', { method: 'POST' });
+            updateAll();
+        }
+
+        async function stopBot() {
+            await fetch('/api/stop', { method: 'POST' });
+            updateAll();
+        }
+
+        function updateAll() {
+            updateStatus();
+            updatePositions();
+            updateTrades();
+            updateEquity();
+        }
+
+        // Init
+        initChart();
+        updateAll();
+        setInterval(updateAll, 5000);
+    </script>
+</body>
+</html>

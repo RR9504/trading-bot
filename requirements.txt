@@ -5,6 +5,7 @@ ta>=0.11.0
 alpaca-trade-api>=3.0.0
 python-binance>=1.0.19
 avanza>=3.0.0
+flask>=3.0.0
 pyyaml>=6.0
 schedule>=1.2.0
 pytest>=7.4.0
