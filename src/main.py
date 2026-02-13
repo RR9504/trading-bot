@@ -53,22 +53,37 @@ def main():
         broker = PaperBroker(initial_balance=paper_config.get("initial_balance", 100000))
         logger.info(f"Paper trading aktiverat med {broker.cash:.0f} {paper_config.get('currency', 'SEK')}")
     elif mode == "alpaca":
-        ac = config.get("alpaca", {})
-        broker = AlpacaBroker(api_key=ac["api_key"], api_secret=ac["api_secret"], base_url=ac.get("base_url", "https://paper-api.alpaca.markets"))
+        api_key = os.environ.get("ALPACA_API_KEY", "")
+        api_secret = os.environ.get("ALPACA_API_SECRET", "")
+        if not api_key or not api_secret:
+            logger.error("ALPACA_API_KEY och ALPACA_API_SECRET måste sättas som miljövariabler")
+            sys.exit(1)
+        base_url = config.get("alpaca", {}).get("base_url", "https://paper-api.alpaca.markets")
+        broker = AlpacaBroker(api_key=api_key, api_secret=api_secret, base_url=base_url)
         if not broker.connect():
             sys.exit(1)
         symbols = config.get("symbols", {}).get("us", [])
         logger.info("Alpaca live-trading aktiverat (US-aktier)")
     elif mode == "binance":
-        bc = config.get("binance", {})
-        broker = BinanceBroker(api_key=bc["api_key"], api_secret=bc["api_secret"], testnet=bc.get("testnet", True))
+        api_key = os.environ.get("BINANCE_API_KEY", "")
+        api_secret = os.environ.get("BINANCE_API_SECRET", "")
+        if not api_key or not api_secret:
+            logger.error("BINANCE_API_KEY och BINANCE_API_SECRET måste sättas som miljövariabler")
+            sys.exit(1)
+        testnet = config.get("binance", {}).get("testnet", True)
+        broker = BinanceBroker(api_key=api_key, api_secret=api_secret, testnet=testnet)
         if not broker.connect():
             sys.exit(1)
         symbols = config.get("symbols", {}).get("crypto", [])
-        logger.info(f"Binance trading aktiverat (testnet={bc.get('testnet', True)})")
+        logger.info(f"Binance trading aktiverat (testnet={testnet})")
     elif mode == "avanza":
-        av = config.get("avanza", {})
-        broker = AvanzaBroker(username=av["username"], password=av["password"], totp_secret=av["totp_secret"])
+        username = os.environ.get("AVANZA_USERNAME", "")
+        password = os.environ.get("AVANZA_PASSWORD", "")
+        totp_secret = os.environ.get("AVANZA_TOTP_SECRET", "")
+        if not username or not password or not totp_secret:
+            logger.error("AVANZA_USERNAME, AVANZA_PASSWORD och AVANZA_TOTP_SECRET måste sättas som miljövariabler")
+            sys.exit(1)
+        broker = AvanzaBroker(username=username, password=password, totp_secret=totp_secret)
         if not broker.connect():
             sys.exit(1)
         symbols = config.get("symbols", {}).get("swedish", [])

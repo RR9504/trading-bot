@@ -1,10 +1,15 @@
 import sys
 import os
-import json
+import secrets
+import logging
 import threading
+import time
+import functools
 from datetime import datetime
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -20,6 +25,13 @@ from src.strategies.momentum_strategy import MomentumStrategy
 from src.utils.logger import setup_logger
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+
+# Rate limiting
+limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
+
+# Audit logger
+audit_log = logging.getLogger("audit")
 
 STRATEGIES = {
     "rsi": RSIStrategy,
@@ -32,6 +44,74 @@ engine = None
 bot_thread = None
 bot_running = False
 
+DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "admin")
+DASHBOARD_PASS = os.environ.get("DASHBOARD_PASS")
+
+if not DASHBOARD_PASS:
+    DASHBOARD_PASS = secrets.token_urlsafe(16)
+    print(f"\n{'='*50}")
+    print(f"  GENERERAT DASHBOARD-LÖSENORD")
+    print(f"  Användare: {DASHBOARD_USER}")
+    print(f"  Lösenord:  {DASHBOARD_PASS}")
+    print(f"  Sätt DASHBOARD_PASS som miljövariabel för permanent lösenord")
+    print(f"{'='*50}\n")
+
+
+# --- Security headers ---
+
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self';"
+    )
+    return response
+
+
+# --- Auth ---
+
+def login_required(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Unauthorized"}), 401
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
+def login():
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if secrets.compare_digest(username, DASHBOARD_USER) and secrets.compare_digest(password, DASHBOARD_PASS):
+            session["authenticated"] = True
+            session.permanent = True
+            audit_log.warning(f"LOGIN OK från {request.remote_addr}")
+            return redirect(url_for("index"))
+        audit_log.warning(f"LOGIN MISSLYCKAT från {request.remote_addr} (user={username})")
+        return render_template("login.html", error="Fel användarnamn eller lösenord"), 401
+    return render_template("login.html", error=None)
+
+
+@app.route("/logout")
+def logout():
+    audit_log.warning(f"LOGOUT från {request.remote_addr}")
+    session.clear()
+    return redirect(url_for("login"))
+
+
+# --- Config ---
 
 def load_config(path: str = "config/settings.yaml") -> dict:
     with open(path) as f:
@@ -76,11 +156,14 @@ def create_engine():
 # --- Routes ---
 
 @app.route("/")
+@login_required
 def index():
     return render_template("dashboard.html")
 
 
 @app.route("/api/status")
+@login_required
+@limiter.limit("30 per minute")
 def api_status():
     global engine, bot_running
     if not engine:
@@ -107,6 +190,8 @@ def api_status():
 
 
 @app.route("/api/positions")
+@login_required
+@limiter.limit("30 per minute")
 def api_positions():
     if not engine:
         return jsonify([])
@@ -126,6 +211,8 @@ def api_positions():
 
 
 @app.route("/api/trades")
+@login_required
+@limiter.limit("30 per minute")
 def api_trades():
     if not engine:
         return jsonify([])
@@ -144,11 +231,12 @@ def api_trades():
 
 
 @app.route("/api/equity")
+@login_required
+@limiter.limit("30 per minute")
 def api_equity():
     if not engine:
         return jsonify([])
 
-    # Bygg equity-kurva från trades
     balance = engine.broker.initial_balance
     equity_curve = [{"time": "Start", "value": balance}]
     for t in engine.portfolio.trade_records:
@@ -161,22 +249,25 @@ def api_equity():
 
 
 @app.route("/api/start", methods=["POST"])
+@login_required
+@limiter.limit("5 per minute")
 def api_start():
     global engine, bot_thread, bot_running
     if bot_running:
         return jsonify({"status": "already_running"})
 
+    audit_log.warning(f"BOT STARTAD av {request.remote_addr}")
     engine = create_engine()
     bot_running = True
 
     def run_bot():
         global bot_running
+        bot_logger = logging.getLogger("trading-bot")
         while bot_running:
             try:
                 engine.run_once()
-            except Exception:
-                pass
-            import time
+            except Exception as e:
+                bot_logger.error(f"Bot-cykel misslyckades: {e}")
             time.sleep(60)
 
     bot_thread = threading.Thread(target=run_bot, daemon=True)
@@ -185,8 +276,11 @@ def api_start():
 
 
 @app.route("/api/stop", methods=["POST"])
+@login_required
+@limiter.limit("5 per minute")
 def api_stop():
     global bot_running
+    audit_log.warning(f"BOT STOPPAD av {request.remote_addr}")
     bot_running = False
     if engine:
         engine.stop()
@@ -196,4 +290,4 @@ def api_stop():
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     engine = create_engine()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=False, host="127.0.0.1", port=5000)

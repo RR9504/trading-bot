@@ -176,6 +176,7 @@
             <span id="status-text">Stoppad</span>
             <button class="btn btn-start" id="btn-start" onclick="startBot()">Starta</button>
             <button class="btn btn-stop" id="btn-stop" onclick="stopBot()" style="display:none;">Stoppa</button>
+            <a href="/logout" class="btn" style="background:#30363d;text-decoration:none;color:#e1e4e8;">Logga ut</a>
         </div>
     </div>
 
@@ -343,28 +344,56 @@
             } catch (e) {}
         }
 
+        function esc(str) {
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+
+        function createRow(cells) {
+            const tr = document.createElement('tr');
+            cells.forEach(({text, cls, bold, html}) => {
+                const td = document.createElement('td');
+                if (cls) td.className = cls;
+                if (bold) {
+                    const b = document.createElement('strong');
+                    b.textContent = text;
+                    td.appendChild(b);
+                } else if (html) {
+                    td.innerHTML = html;
+                } else {
+                    td.textContent = text;
+                }
+                tr.appendChild(td);
+            });
+            return tr;
+        }
+
         async function updatePositions() {
             try {
                 const res = await fetch('/api/positions');
                 const data = await res.json();
                 const body = document.getElementById('positions-body');
+                body.replaceChildren();
 
                 if (data.length === 0) {
-                    body.innerHTML = '<tr><td colspan="5" class="empty-state">Inga positioner</td></tr>';
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 5; td.className = 'empty-state'; td.textContent = 'Inga positioner';
+                    tr.appendChild(td); body.appendChild(tr);
                     return;
                 }
 
-                body.innerHTML = data.map(p => `
-                    <tr>
-                        <td><strong>${p.symbol}</strong></td>
-                        <td>${p.quantity}</td>
-                        <td>${p.avg_price.toFixed(2)}</td>
-                        <td>${p.current_price.toFixed(2)}</td>
-                        <td class="${p.pnl >= 0 ? 'positive' : 'negative'}">
-                            ${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(0)} kr (${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(1)}%)
-                        </td>
-                    </tr>
-                `).join('');
+                data.forEach(p => {
+                    const pnlText = `${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(0)} kr (${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(1)}%)`;
+                    body.appendChild(createRow([
+                        {text: p.symbol, bold: true},
+                        {text: p.quantity},
+                        {text: p.avg_price.toFixed(2)},
+                        {text: p.current_price.toFixed(2)},
+                        {text: pnlText, cls: p.pnl >= 0 ? 'positive' : 'negative'},
+                    ]));
+                });
             } catch (e) {}
         }
 
@@ -373,24 +402,30 @@
                 const res = await fetch('/api/trades');
                 const data = await res.json();
                 const body = document.getElementById('trades-body');
+                body.replaceChildren();
 
                 if (data.length === 0) {
-                    body.innerHTML = '<tr><td colspan="6" class="empty-state">Inga trades ännu</td></tr>';
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 6; td.className = 'empty-state'; td.textContent = 'Inga trades ännu';
+                    tr.appendChild(td); body.appendChild(tr);
                     return;
                 }
 
-                body.innerHTML = data.map(t => `
-                    <tr>
-                        <td>${t.timestamp.split(' ')[1]}</td>
-                        <td><strong>${t.symbol}</strong></td>
-                        <td><span class="badge badge-${t.side}">${t.side === 'buy' ? 'KÖP' : 'SÄLJ'}</span></td>
-                        <td>${t.quantity}</td>
-                        <td>${t.price.toFixed(2)}</td>
-                        <td class="${t.pnl >= 0 ? 'positive' : 'negative'}">
-                            ${t.pnl !== 0 ? (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(0) + ' kr' : '-'}
-                        </td>
-                    </tr>
-                `).join('');
+                data.forEach(t => {
+                    const sideClass = t.side === 'buy' ? 'badge-buy' : 'badge-sell';
+                    const sideText = t.side === 'buy' ? 'KÖP' : 'SÄLJ';
+                    const badge = `<span class="badge ${esc(sideClass)}">${esc(sideText)}</span>`;
+                    const pnlText = t.pnl !== 0 ? (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(0) + ' kr' : '-';
+                    body.appendChild(createRow([
+                        {text: t.timestamp.split(' ')[1]},
+                        {text: t.symbol, bold: true},
+                        {html: badge},
+                        {text: t.quantity},
+                        {text: t.price.toFixed(2)},
+                        {text: pnlText, cls: t.pnl >= 0 ? 'positive' : 'negative'},
+                    ]));
+                });
             } catch (e) {}
         }
 

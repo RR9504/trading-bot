@@ -26,20 +26,14 @@ symbols:
     - ERIC-B.ST
     - HM-B.ST
 
+# Broker-credentials lagras som miljövariabler i .env
+# Se README för instruktioner
+
 alpaca:
-  api_key: YOUR_ALPACA_API_KEY
-  api_secret: YOUR_ALPACA_SECRET
   base_url: https://paper-api.alpaca.markets
 
 binance:
-  api_key: YOUR_BINANCE_API_KEY
-  api_secret: YOUR_BINANCE_SECRET
   testnet: true
-
-avanza:
-  username: YOUR_USERNAME
-  password: YOUR_PASSWORD
-  totp_secret: YOUR_TOTP_SECRET
 
 logging:
   level: INFO

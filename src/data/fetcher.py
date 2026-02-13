@@ -1,5 +1,9 @@
+import logging
+
 import yfinance as yf
 import pandas as pd
+
+logger = logging.getLogger("trading-bot")
 
 
 class DataFetcher:
@@ -23,6 +27,8 @@ class DataFetcher:
         for symbol in symbols:
             try:
                 prices[symbol] = self.get_current_price(symbol)
-            except (ValueError, Exception):
-                continue
+            except ValueError:
+                logger.warning(f"Ingen data för {symbol}")
+            except Exception as e:
+                logger.error(f"Fel vid hämtning av {symbol}: {e}")
         return prices

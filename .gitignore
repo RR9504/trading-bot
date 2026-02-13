@@ -1,9 +1,17 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+*.env
 config/settings.yaml
+config/secrets.*
 logs/*.log
+logs/
 .venv/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+*.pem
+*.key
+*.crt
